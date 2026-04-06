@@ -1,4 +1,5 @@
 import { isProjectFile } from '../project/schema'
+import type { ProjectLayersPayload } from '../project/layers'
 import type { UniformsState } from '../shader/uniforms'
 
 export const SNAPSHOTS_KEY = 'midnightshader:snapshots'
@@ -7,6 +8,8 @@ export const FULL_KEY = 'midnightshader:fullProject'
 export const GRAPH_LEGACY_KEY = 'midnightshader:graph'
 export const WORKSPACE_CHANGED_EVENT = 'midnightshader:workspace-changed'
 
+export const MAX_SNAPSHOTS = 50
+
 export function notifyWorkspaceChanged() {
   window.dispatchEvent(new Event(WORKSPACE_CHANGED_EVENT))
 }
@@ -14,9 +17,12 @@ export function notifyWorkspaceChanged() {
 export type StoredSnapshot = {
   id: string
   name: string
+  description: string
   createdAt: string
+  type: 'manual' | 'auto'
   shaderCode: string
   uniforms: UniformsState
+  layers: ProjectLayersPayload | null
   /** JPEG-Data-URL, beim Snapshot erzeugt (optional bei älteren Einträgen). */
   thumbnailDataUrl?: string
 }
@@ -65,20 +71,37 @@ export function loadSnapshots(): StoredSnapshot[] {
     if (!raw) return []
     const parsed = JSON.parse(raw) as unknown
     if (!Array.isArray(parsed)) return []
-    return parsed.filter(
-      (x): x is StoredSnapshot =>
-        typeof x === 'object' &&
-        x !== null &&
-        typeof (x as StoredSnapshot).id === 'string' &&
-        typeof (x as StoredSnapshot).name === 'string' &&
-        typeof (x as StoredSnapshot).createdAt === 'string' &&
-        typeof (x as StoredSnapshot).shaderCode === 'string' &&
-        ((x as StoredSnapshot).thumbnailDataUrl === undefined ||
-          typeof (x as StoredSnapshot).thumbnailDataUrl === 'string'),
-    )
+    return parsed
+      .filter(
+        (x): x is Record<string, unknown> =>
+          typeof x === 'object' &&
+          x !== null &&
+          typeof (x as Record<string, unknown>).id === 'string' &&
+          typeof (x as Record<string, unknown>).name === 'string' &&
+          typeof (x as Record<string, unknown>).createdAt === 'string' &&
+          typeof (x as Record<string, unknown>).shaderCode === 'string',
+      )
+      .map((x) => ({
+        id: x.id as string,
+        name: x.name as string,
+        description: (x.description as string) ?? '',
+        createdAt: x.createdAt as string,
+        type: (x.type as 'manual' | 'auto') ?? 'manual',
+        shaderCode: x.shaderCode as string,
+        uniforms: x.uniforms as UniformsState,
+        layers: (x.layers as ProjectLayersPayload) ?? null,
+        thumbnailDataUrl: x.thumbnailDataUrl as string | undefined,
+      }))
   } catch {
     return []
   }
+}
+
+export function pruneAutoSnapshots(snapshots: StoredSnapshot[]): StoredSnapshot[] {
+  const cutoff = Date.now() - 24 * 60 * 60 * 1000
+  return snapshots.filter(
+    (s) => s.type === 'manual' || new Date(s.createdAt).getTime() > cutoff,
+  )
 }
 
 export function loadCurrentSummary(): CurrentProjectSummary | null {
@@ -128,7 +151,7 @@ export function buildRecentCards(max = 4): CatalogRow[] {
       name: s.name,
       updatedAt: s.createdAt,
       kind: 'snapshot',
-      badge: 'Snapshot',
+      badge: s.type === 'auto' ? 'Auto' : 'Milestone',
       sizeLabel: formatBytes(approxShaderSizeBytes(s.shaderCode)),
       thumbnailDataUrl: s.thumbnailDataUrl,
     })
@@ -158,7 +181,7 @@ export function buildAllProjectRows(limit = 12): CatalogRow[] {
       name: s.name,
       updatedAt: s.createdAt,
       kind: 'snapshot',
-      badge: 'Snapshot',
+      badge: s.type === 'auto' ? 'Auto' : 'Milestone',
       sizeLabel: formatBytes(approxShaderSizeBytes(s.shaderCode)),
       thumbnailDataUrl: s.thumbnailDataUrl,
     })

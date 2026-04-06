@@ -115,3 +115,68 @@ export function AddFloatNode(props: NodeProps) {
     </div>
   )
 }
+
+export function NoiseNode(props: NodeProps) {
+  const data = props.data as NodeLabel
+  return (
+    <div style={box}>
+      <Handle type="target" position={Position.Left} id="uv" style={{ top: '35%', background: '#00e3fd' }} />
+      <Handle type="target" position={Position.Left} id="scale" style={{ top: '65%', background: '#00e3fd' }} />
+      <div style={{ ...title, color: '#00e3fd' }}>{data.label ?? 'Noise'}</div>
+      <div style={{ color: '#adaaaa' }}>snoise(uv × scale)</div>
+      <Handle type="source" position={Position.Right} id="out" style={{ background: '#00e3fd' }} />
+    </div>
+  )
+}
+
+export function VoronoiNode(props: NodeProps) {
+  const data = props.data as NodeLabel
+  return (
+    <div style={box}>
+      <Handle type="target" position={Position.Left} id="uv" style={{ top: '35%', background: '#00e3fd' }} />
+      <Handle type="target" position={Position.Left} id="scale" style={{ top: '65%', background: '#00e3fd' }} />
+      <div style={{ ...title, color: '#00e3fd' }}>{data.label ?? 'Voronoi'}</div>
+      <div style={{ color: '#adaaaa' }}>voronoi(uv × scale)</div>
+      <Handle type="source" position={Position.Right} id="out" style={{ background: '#00e3fd' }} />
+    </div>
+  )
+}
+
+export function Texture2DNode(props: NodeProps) {
+  const data = props.data as NodeLabel
+  return (
+    <div style={box}>
+      <Handle type="target" position={Position.Left} id="uv" style={{ background: '#00e3fd' }} />
+      <div style={{ ...title, color: '#00e3fd' }}>{data.label ?? 'Texture'}</div>
+      <div style={{ color: '#adaaaa' }}>checkerboard (→ Spec 2)</div>
+      <Handle type="source" position={Position.Right} id="out" style={{ background: '#b6a0ff' }} />
+    </div>
+  )
+}
+
+export function ColorPickerNode(props: NodeProps) {
+  const data = props.data as NodeLabel & { r?: number; g?: number; b?: number }
+  const r = data.r ?? 1, g = data.g ?? 0.5, b = data.b ?? 0.2
+  const hex = `rgb(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)})`
+  return (
+    <div style={box}>
+      <div style={{ ...title, color: '#9c7eff' }}>{data.label ?? 'Farbe'}</div>
+      <div style={{ width: 40, height: 20, borderRadius: 4, background: hex, border: '1px solid rgba(255,255,255,0.2)', marginBottom: 4 }} />
+      <Handle type="source" position={Position.Right} id="out" style={{ background: '#9c7eff' }} />
+    </div>
+  )
+}
+
+export function Vec3ConstNode(props: NodeProps) {
+  const data = props.data as NodeLabel & { x?: number; y?: number; z?: number }
+  const x = data.x ?? 0, y = data.y ?? 0, z = data.z ?? 0
+  return (
+    <div style={box}>
+      <div style={{ ...title, color: '#9c7eff' }}>{data.label ?? 'Vec3'}</div>
+      <div style={{ color: '#adaaaa', fontFamily: 'ui-monospace, monospace', fontSize: 11 }}>
+        ({x.toFixed(2)}, {y.toFixed(2)}, {z.toFixed(2)})
+      </div>
+      <Handle type="source" position={Position.Right} id="out" style={{ background: '#9c7eff' }} />
+    </div>
+  )
+}

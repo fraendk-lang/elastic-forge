@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   Background,
@@ -20,7 +20,21 @@ import {
   TimeSourceNode,
   UvSourceNode,
   WaveNode,
+  NoiseNode,
+  VoronoiNode,
+  Texture2DNode,
+  ColorPickerNode,
+  Vec3ConstNode,
 } from '../graph/GraphNodeViews'
+import NodeSearchMenu from '../graph/NodeSearchMenu'
+import VersionHistorySidebar from '../components/VersionHistorySidebar'
+import {
+  CATEGORIES,
+  CATEGORY_COLORS,
+  CATEGORY_LABELS,
+  getByCategory,
+  type NodeRegistryEntry,
+} from '../graph/nodeRegistry'
 
 const nodeTypes = {
   uvSource: UvSourceNode,
@@ -31,69 +45,64 @@ const nodeTypes = {
   floatConst: FloatConstNode,
   mulFloat: MulFloatNode,
   addFloat: AddFloatNode,
+  noise: NoiseNode,
+  voronoi: VoronoiNode,
+  texture2D: Texture2DNode,
+  colorPicker: ColorPickerNode,
+  vec3Const: Vec3ConstNode,
 } satisfies NodeTypes
 
-function randomSpawn() {
-  return {
-    x: 200 + Math.random() * 140,
-    y: 96 + Math.random() * 120,
-  }
-}
-
-function NodesRail() {
+function NodesRail({ onOpenSearch }: { onOpenSearch: () => void }) {
   const { addGraphNode } = useProject()
+
+  function addNode(entry: NodeRegistryEntry) {
+    addGraphNode({
+      id: crypto.randomUUID(),
+      type: entry.type,
+      position: { x: 200 + Math.random() * 140, y: 96 + Math.random() * 120 },
+      data: { label: entry.label, ...(entry.defaultData ?? {}) },
+    })
+  }
 
   return (
     <div className="graph-rail-nodes">
-      <p className="graph-rail-hint">
-        Neue Knoten erscheinen im sichtbaren Graph-Bereich (feste Startposition). Im Canvas
-        verschieben und verbinden.
-      </p>
-      <span className="graph-add-panel__label">Knoten</span>
-      <div className="graph-rail-node-btns">
-        <button
-          type="button"
-          className="graph-add-panel__btn"
-          onClick={() =>
-            addGraphNode({
-              id: crypto.randomUUID(),
-              type: 'floatConst',
-              position: randomSpawn(),
-              data: { value: 0.5, label: '0.5' },
-            })
-          }
-        >
-          Konstante
-        </button>
-        <button
-          type="button"
-          className="graph-add-panel__btn"
-          onClick={() =>
-            addGraphNode({
-              id: crypto.randomUUID(),
-              type: 'mulFloat',
-              position: randomSpawn(),
-              data: { label: '×' },
-            })
-          }
-        >
-          ×
-        </button>
-        <button
-          type="button"
-          className="graph-add-panel__btn"
-          onClick={() =>
-            addGraphNode({
-              id: crypto.randomUUID(),
-              type: 'addFloat',
-              position: randomSpawn(),
-              data: { label: '+' },
-            })
-          }
-        >
-          +
-        </button>
-      </div>
+      <button
+        type="button"
+        className="graph-add-panel__btn"
+        style={{ marginBottom: 12, width: '100%' }}
+        onClick={onOpenSearch}
+      >
+        Alle Knoten (Tab)
+      </button>
+      {CATEGORIES.map((cat) => {
+        const entries = getByCategory(cat).filter(
+          (e) => e.type !== 'fragmentOut' && e.type !== 'uvSource' && e.type !== 'timeSource',
+        )
+        if (entries.length === 0) return null
+        return (
+          <div key={cat} style={{ marginBottom: 12 }}>
+            <span
+              className="graph-add-panel__label"
+              style={{ color: CATEGORY_COLORS[cat] }}
+            >
+              {CATEGORY_LABELS[cat]}
+            </span>
+            <div className="graph-rail-node-btns">
+              {entries.map((entry) => (
+                <button
+                  key={entry.type}
+                  type="button"
+                  className="graph-add-panel__btn"
+                  onClick={() => addNode(entry)}
+                  title={entry.description}
+                >
+                  {entry.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -224,7 +233,17 @@ function LayersRail() {
   )
 }
 
-function NodeGraphCanvas() {
+function NodeGraphCanvas({
+  searchMenuPos,
+  setSearchMenuPos,
+  historyOpen,
+  setHistoryOpen,
+}: {
+  searchMenuPos: { x: number; y: number } | null
+  setSearchMenuPos: (pos: { x: number; y: number } | null) => void
+  historyOpen: boolean
+  setHistoryOpen: (open: boolean) => void
+}) {
   const {
     graphNodes,
     graphEdges,
@@ -235,6 +254,7 @@ function NodeGraphCanvas() {
     graphCodegenError,
     setGraphCodegenError,
     activeLayerId,
+    addGraphNode,
   } = useProject()
 
   const onApply = useCallback(() => {
@@ -247,25 +267,57 @@ function NodeGraphCanvas() {
     [],
   )
 
+  // Double-click on canvas to open search
+  const onPaneDoubleClick = useCallback((e: React.MouseEvent) => {
+    setSearchMenuPos({ x: e.clientX, y: e.clientY })
+  }, [setSearchMenuPos])
+
+  // Tab key to open search
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Tab' && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault()
+        const canvas = document.querySelector('.graph-canvas-wrap')
+        if (canvas) {
+          const rect = canvas.getBoundingClientRect()
+          setSearchMenuPos({ x: rect.left + rect.width / 2 - 150, y: rect.top + rect.height / 2 - 190 })
+        }
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [setSearchMenuPos])
+
+  function handleSearchSelect(entry: NodeRegistryEntry) {
+    const pos = searchMenuPos ?? { x: 300, y: 200 }
+    addGraphNode({
+      id: crypto.randomUUID(),
+      type: entry.type,
+      position: { x: pos.x - 200, y: pos.y - 100 },
+      data: { label: entry.label, ...(entry.defaultData ?? {}) },
+    })
+    setSearchMenuPos(null)
+  }
+
   return (
     <>
       <div className="graph-scope-note" role="note">
         <strong>Graph vs. Galerie-Presets:</strong> Dieser Graph erzeugt ein{' '}
         <em>eigenes, vereinfachtes</em> GLSL-Fragment. Signature-Looks aus der Galerie existieren
-        nur im Editor-Code — <strong>„Graph → GLSL anwenden“ ersetzt</strong> den aktuellen
+        nur im Editor-Code — <strong>„Graph → GLSL anwenden" ersetzt</strong> den aktuellen
         Fragment-Shader vollständig (Presets danach ggf. erneut laden).
       </div>
       <details className="graph-manual">
         <summary className="graph-manual__summary">Anleitung: Node Editor bedienen</summary>
         <div className="graph-manual__body">
           <p>
-            <strong>Ebenen:</strong> Links unter „Ebenen“ wechselst du zwischen separaten Graphs.
-            Nur die <em>aktive</em> Ebene wird in den Editor übernommen. „+ Ebene hinzufügen“ legt
+            <strong>Ebenen:</strong> Links unter „Ebenen" wechselst du zwischen separaten Graphs.
+            Nur die <em>aktive</em> Ebene wird in den Editor übernommen. „+ Ebene hinzufügen" legt
             eine neue Ebene mit Standard-Graph an.
           </p>
           <p>
-            <strong>Knoten hinzufügen:</strong> Tab „Knoten“ — oder weiterhin unten im Canvas-Bereich
-            arbeiten. Neue Knoten erscheinen an einer festen Startposition im Graph.
+            <strong>Knoten hinzufügen:</strong> Doppelklick auf den Canvas oder Tab-Taste drücken,
+            um die Knoten-Suche zu öffnen. Alternativ: Seitenleiste „Knoten".
           </p>
           <p>
             <strong>Verbindungen:</strong> Von einem <em>Ausgang</em> (kleiner Punkt rechts) zum{' '}
@@ -273,7 +325,7 @@ function NodeGraphCanvas() {
             (z.&nbsp;B. Float → Float) lassen sich verbinden.
           </p>
           <p>
-            <strong>Graph → GLSL:</strong> Wenn alles bis zum Knoten „Fragment Out“ durchgängig
+            <strong>Graph → GLSL:</strong> Wenn alles bis zum Knoten „Fragment Out" durchgängig
             verbunden ist, erzeugt der Button vollständigen Fragment-Code und schreibt ihn in den
             Editor-Shader (nur für die <em>aktive Ebene</em>). Fehler erscheinen im roten Banner.
           </p>
@@ -281,11 +333,11 @@ function NodeGraphCanvas() {
             <strong>Beispiel (funktionierender Minimal-Graph):</strong> Verbinde wie folgt:
             <code>UV → Wellen-Sin (UV)</code>, <code>Zeit × Speed → Wellen-Sin (Phase)</code>,
             <code>Wellen-Sin (Out) → Mix → Farbe</code> und <code>Mix → Fragment Out</code>.
-            Danach „Graph → GLSL anwenden“, um den Look im Editor zu sehen.
+            Danach „Graph → GLSL anwenden", um den Look im Editor zu sehen.
           </p>
           <p>
             <strong>Tipp:</strong> Wenn du einen Knoten verdrahtest, prüfe besonders die Eingänge am
-            Knoten „Fragment Out“ — ohne eine gültige Kante gibt es oft direkt einen
+            Knoten „Fragment Out" — ohne eine gültige Kante gibt es oft direkt einen
             Codegen-Fehler.
           </p>
           <p>
@@ -310,6 +362,14 @@ function NodeGraphCanvas() {
           <button type="button" className="save-btn" onClick={onApply}>
             Graph → GLSL anwenden
           </button>
+          <button
+            type="button"
+            className="save-btn"
+            onClick={() => setHistoryOpen(!historyOpen)}
+            style={{ opacity: historyOpen ? 1 : 0.6 }}
+          >
+            History
+          </button>
           <Link to="/editor" className="link-to-editor">
             Zum Editor →
           </Link>
@@ -328,6 +388,7 @@ function NodeGraphCanvas() {
           fitView
           defaultEdgeOptions={defaultEdgeOptions}
           proOptions={{ hideAttribution: true }}
+          onDoubleClick={onPaneDoubleClick}
         >
           <Background color="#484847" gap={20} size={1} />
           <Controls className="graph-controls" />
@@ -337,6 +398,13 @@ function NodeGraphCanvas() {
             nodeColor={() => '#262626'}
           />
         </ReactFlow>
+        {searchMenuPos && (
+          <NodeSearchMenu
+            position={searchMenuPos}
+            onSelect={handleSearchSelect}
+            onClose={() => setSearchMenuPos(null)}
+          />
+        )}
       </div>
     </>
   )
@@ -344,6 +412,16 @@ function NodeGraphCanvas() {
 
 export default function NodeGraphPage() {
   const [railTab, setRailTab] = useState<'layers' | 'nodes'>('layers')
+  const [searchMenuPos, setSearchMenuPos] = useState<{ x: number; y: number } | null>(null)
+  const [historyOpen, setHistoryOpen] = useState(false)
+
+  const openSearchCenter = useCallback(() => {
+    const canvas = document.querySelector('.graph-canvas-wrap')
+    if (canvas) {
+      const rect = canvas.getBoundingClientRect()
+      setSearchMenuPos({ x: rect.left + rect.width / 2 - 150, y: rect.top + rect.height / 2 - 190 })
+    }
+  }, [])
 
   return (
     <div className="graph-page graph-page--split">
@@ -369,14 +447,15 @@ export default function NodeGraphPage() {
           </button>
         </div>
         <div className="graph-rail-body" role="tabpanel">
-          {railTab === 'layers' ? <LayersRail /> : <NodesRail />}
+          {railTab === 'layers' ? <LayersRail /> : <NodesRail onOpenSearch={openSearchCenter} />}
         </div>
       </aside>
       <ReactFlowProvider>
         <div className="graph-main">
-          <NodeGraphCanvas />
+          <NodeGraphCanvas searchMenuPos={searchMenuPos} setSearchMenuPos={setSearchMenuPos} historyOpen={historyOpen} setHistoryOpen={setHistoryOpen} />
         </div>
       </ReactFlowProvider>
+      <VersionHistorySidebar open={historyOpen} onClose={() => setHistoryOpen(false)} />
     </div>
   )
 }

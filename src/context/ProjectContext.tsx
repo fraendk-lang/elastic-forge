@@ -22,7 +22,15 @@ import {
 } from '@xyflow/react'
 import { buildFragmentShader } from '../graph/glslCodegen'
 import { initialGraphEdges, initialGraphNodes } from '../graph/initialGraph'
-import { GRAPH_LEGACY_KEY, loadSnapshots, notifyWorkspaceChanged } from '../lib/workspaceCatalog'
+import {
+  GRAPH_LEGACY_KEY,
+  SNAPSHOTS_KEY,
+  MAX_SNAPSHOTS,
+  loadSnapshots,
+  pruneAutoSnapshots,
+  notifyWorkspaceChanged,
+  type StoredSnapshot,
+} from '../lib/workspaceCatalog'
 import { downloadPackJson, downloadProjectJson, readFileAsText, readProjectFile } from '../project/io'
 import type { MidnightShaderPackFile, PackItem } from '../project/pack'
 import { isPackFile } from '../project/pack'
@@ -167,6 +175,10 @@ type ProjectContextValue = {
   duplicateLayer: (id: string) => void
   /** Aktueller Misch-Snapshot für Editor-Vorschau & Thumbnails */
   getCompositeSnapshot: () => CompositeSnapshot
+  /** Restore from a stored snapshot (version history) */
+  restoreFromSnapshot: (snapshot: StoredSnapshot) => void
+  /** Get current layers payload for snapshot creation */
+  getLayersPayload: () => ProjectLayersPayload
 }
 
 const ProjectContext = createContext<ProjectContextValue | null>(null)
@@ -679,6 +691,68 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     return { metas: layerMetas, bundles }
   }, [layerMetas, activeLayerId, fragmentShader, graphNodes, graphEdges])
 
+  const getLayersPayload = useCallback((): ProjectLayersPayload => {
+    return buildLayersPayload(
+      activeLayerId,
+      layerMetas,
+      bundlesRef.current,
+      fragmentShader,
+      graphNodes,
+      graphEdges,
+    )
+  }, [activeLayerId, layerMetas, fragmentShader, graphNodes, graphEdges])
+
+  const restoreFromSnapshot = useCallback(
+    (snapshot: StoredSnapshot) => {
+      if (snapshot.layers) {
+        const ly = snapshot.layers
+        const bundle = ly.bundles[ly.activeLayerId] ?? defaultLayerBundle()
+        setActiveLayerId(ly.activeLayerId)
+        setLayerMetas([...ly.metas].sort((a, b) => a.order - b.order))
+        bundlesRef.current = cloneBundles(ly.bundles)
+        setGraphNodes(bundle.nodes)
+        setGraphEdges(bundle.edges)
+        setFragmentShader(bundle.fragment)
+      } else {
+        setFragmentShader(snapshot.shaderCode)
+      }
+      setUniforms(snapshot.uniforms)
+      setGraphCodegenError(null)
+    },
+    [],
+  )
+
+  // Auto-snapshot every 10 minutes
+  const lastAutoHashRef = useRef('')
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (fragmentShader === lastAutoHashRef.current) return
+      lastAutoHashRef.current = fragmentShader
+      const snapshots = loadSnapshots()
+      const newSnapshot: StoredSnapshot = {
+        id: crypto.randomUUID(),
+        name: 'Auto-save',
+        description: '',
+        createdAt: new Date().toISOString(),
+        type: 'auto',
+        shaderCode: fragmentShader,
+        uniforms: { ...uniforms },
+        layers: buildLayersPayload(
+          activeLayerId,
+          layerMetas,
+          bundlesRef.current,
+          fragmentShader,
+          graphNodes,
+          graphEdges,
+        ),
+        thumbnailDataUrl: undefined,
+      }
+      const updated = pruneAutoSnapshots([newSnapshot, ...snapshots]).slice(0, MAX_SNAPSHOTS)
+      localStorage.setItem(SNAPSHOTS_KEY, JSON.stringify(updated))
+    }, 10 * 60 * 1000)
+    return () => clearInterval(interval)
+  }, [fragmentShader, uniforms, activeLayerId, layerMetas, graphNodes, graphEdges])
+
   const value = useMemo(
     () => ({
       projectId,
@@ -716,6 +790,8 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       moveLayerDown,
       duplicateLayer,
       getCompositeSnapshot,
+      restoreFromSnapshot,
+      getLayersPayload,
     }),
     [
       projectId,
@@ -749,6 +825,8 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       moveLayerDown,
       duplicateLayer,
       getCompositeSnapshot,
+      restoreFromSnapshot,
+      getLayersPayload,
     ],
   )
 

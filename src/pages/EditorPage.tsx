@@ -2,6 +2,7 @@ import Editor from '@monaco-editor/react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useProject } from '../context/ProjectContext'
+import VersionHistorySidebar from '../components/VersionHistorySidebar'
 import { useToast } from '../context/ToastContext'
 import { useAuth } from '../context/AuthContext'
 import {
@@ -78,6 +79,7 @@ export default function EditorPage() {
   const mountRef = useRef<HTMLDivElement | null>(null)
   const uniformsRefLive = useRef(uniforms)
   const [error, setError] = useState('')
+  const [historyOpen, setHistoryOpen] = useState(false)
 
   function applyGradeProfileToUniforms(profile: GradeProfile, base: unknown) {
     const u = normalizeUniforms(base)
@@ -147,6 +149,11 @@ export default function EditorPage() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 's') {
+        e.preventDefault()
+        setHistoryOpen(true)
+        return
+      }
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
         e.preventDefault()
         saveProjectLocal()
@@ -405,12 +412,15 @@ export default function EditorPage() {
     const next: StoredSnapshot = {
       id: crypto.randomUUID(),
       name: projectName.trim() || 'Untitled Shader',
+      description: '',
       createdAt: new Date().toISOString(),
+      type: 'manual',
       shaderCode: fragmentShader,
       uniforms: { ...uniforms },
+      layers: null,
       ...(thumb ? { thumbnailDataUrl: thumb } : {}),
     }
-    const updated = [next, ...snapshots].slice(0, 20)
+    const updated = [next, ...snapshots].slice(0, 50)
     setSnapshots(updated)
     localStorage.setItem(SNAPSHOTS_KEY, JSON.stringify(updated))
     notifyWorkspaceChanged()
@@ -698,6 +708,14 @@ ${SNIPPET_MAIN_END}`
         </button>
         <button
           type="button"
+          className="save-btn"
+          onClick={() => setHistoryOpen(!historyOpen)}
+          style={{ opacity: historyOpen ? 1 : 0.6 }}
+        >
+          History
+        </button>
+        <button
+          type="button"
           className="save-btn community-publish-btn"
           onClick={() => void publishCommunity()}
           disabled={publishBusy}
@@ -748,6 +766,7 @@ ${SNIPPET_MAIN_END}`
           </div>
         ) : null}
       </section>
+      <VersionHistorySidebar open={historyOpen} onClose={() => setHistoryOpen(false)} />
     </div>
   )
 }
