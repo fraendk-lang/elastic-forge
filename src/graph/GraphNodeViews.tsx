@@ -153,6 +153,26 @@ export function Texture2DNode(props: NodeProps) {
       ) : (
         <div style={{ color: '#adaaaa', fontSize: 10 }}>{data.textureId ? 'Textur geladen' : 'Keine Textur'}</div>
       )}
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation()
+          window.dispatchEvent(new CustomEvent('forge:pick-texture', { detail: { nodeId: props.id } }))
+        }}
+        style={{
+          marginTop: 4,
+          padding: '3px 8px',
+          background: 'rgba(0,227,253,0.12)',
+          border: '1px solid rgba(0,227,253,0.3)',
+          borderRadius: 5,
+          color: '#00e3fd',
+          fontSize: 10,
+          cursor: 'pointer',
+          width: '100%',
+        }}
+      >
+        {data.textureId ? 'Textur ändern' : 'Textur wählen'}
+      </button>
       <Handle type="source" position={Position.Right} id="out" style={{ background: '#b6a0ff' }} />
     </div>
   )

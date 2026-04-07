@@ -2,10 +2,13 @@ import * as THREE from 'three'
 import { VERTEX_SHADER, validateFragmentShader } from './constants'
 import type { LayerBundle, ShaderLayerMeta } from '../project/layers'
 import type { UniformsState } from './uniforms'
+import type { TextureBinding } from '../graph/glslCodegen'
+import { getTextureFromCache } from './textureCache'
 
 export type CompositeSnapshot = {
   metas: ShaderLayerMeta[]
   bundles: Record<string, LayerBundle>
+  textureBindings?: TextureBinding[]
 }
 
 const BLEND_FS = `precision highp float;
@@ -216,12 +219,20 @@ export function installEditorCompositeViewport(opts: {
     layerMats = []
   }
 
-  const rebuildLayerMaterials = (stack: VisibleLayerPass[]) => {
+  const rebuildLayerMaterials = (stack: VisibleLayerPass[], bindings?: TextureBinding[]) => {
     disposeLayerMats()
+    // Build texture uniforms from cache
+    const texUniforms: Record<string, THREE.IUniform> = {}
+    if (bindings) {
+      for (const b of bindings) {
+        const tex = getTextureFromCache(b.textureId)
+        if (tex) texUniforms[b.uniformName] = { value: tex }
+      }
+    }
     for (const pass of stack) {
       layerMats.push(
         new THREE.ShaderMaterial({
-          uniforms: sharedUniforms,
+          uniforms: { ...sharedUniforms, ...texUniforms },
           vertexShader: VERTEX_SHADER,
           fragmentShader: pass.fragment,
           toneMapped: false,
@@ -267,7 +278,7 @@ export function installEditorCompositeViewport(opts: {
     const nextSig = stack.map((p) => `${p.meta.id}\0${p.fragment}`).join('\x01')
     if (nextSig !== stackSig) {
       stackSig = nextSig
-      rebuildLayerMaterials(stack)
+      rebuildLayerMaterials(stack, snapshot.textureBindings)
     }
 
     if (stack.length === 0) {

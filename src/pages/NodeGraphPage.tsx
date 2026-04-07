@@ -35,6 +35,8 @@ import {
   getByCategory,
   type NodeRegistryEntry,
 } from '../graph/nodeRegistry'
+import AssetLibrary from '../components/AssetLibrary'
+import { getTexture } from '../lib/textureStore'
 
 const nodeTypes = {
   uvSource: UvSourceNode,
@@ -414,6 +416,32 @@ export default function NodeGraphPage() {
   const [railTab, setRailTab] = useState<'layers' | 'nodes'>('layers')
   const [searchMenuPos, setSearchMenuPos] = useState<{ x: number; y: number } | null>(null)
   const [historyOpen, setHistoryOpen] = useState(false)
+  const [assetPickerNodeId, setAssetPickerNodeId] = useState<string | null>(null)
+  const { updateGraphNodeData, graphNodes } = useProject()
+
+  // Listen for texture pick events from Texture2DNode
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { nodeId: string }
+      setAssetPickerNodeId(detail.nodeId)
+    }
+    window.addEventListener('forge:pick-texture', handler)
+    return () => window.removeEventListener('forge:pick-texture', handler)
+  }, [])
+
+  const handleTextureSelect = useCallback(async (textureId: string) => {
+    if (!assetPickerNodeId) return
+    const tex = await getTexture(textureId)
+    updateGraphNodeData(assetPickerNodeId, {
+      textureId,
+      texturePreview: tex?.dataUrl ?? '',
+    })
+    setAssetPickerNodeId(null)
+  }, [assetPickerNodeId, updateGraphNodeData])
+
+  const currentTextureId = assetPickerNodeId
+    ? (graphNodes.find((n) => n.id === assetPickerNodeId)?.data as Record<string, unknown> | undefined)?.textureId as string | undefined
+    : undefined
 
   const openSearchCenter = useCallback(() => {
     const canvas = document.querySelector('.graph-canvas-wrap')
@@ -456,6 +484,12 @@ export default function NodeGraphPage() {
         </div>
       </ReactFlowProvider>
       <VersionHistorySidebar open={historyOpen} onClose={() => setHistoryOpen(false)} />
+      <AssetLibrary
+        open={assetPickerNodeId !== null}
+        onClose={() => setAssetPickerNodeId(null)}
+        onSelect={(id) => void handleTextureSelect(id)}
+        selectedId={currentTextureId}
+      />
     </div>
   )
 }

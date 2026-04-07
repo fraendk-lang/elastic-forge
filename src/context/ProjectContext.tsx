@@ -149,6 +149,7 @@ type ProjectContextValue = {
   onEdgesChange: (changes: EdgeChange[]) => void
   onConnect: (connection: Connection) => void
   addGraphNode: (node: Node) => void
+  updateGraphNodeData: (nodeId: string, data: Record<string, unknown>) => void
   applyGraphToShader: () => { ok: boolean; error?: string }
   graphCodegenError: string | null
   setGraphCodegenError: (msg: string | null) => void
@@ -179,6 +180,8 @@ type ProjectContextValue = {
   restoreFromSnapshot: (snapshot: StoredSnapshot) => void
   /** Get current layers payload for snapshot creation */
   getLayersPayload: () => ProjectLayersPayload
+  /** Active texture bindings from last codegen (for rendering pipeline) */
+  activeTextureBindings: Array<{ uniformName: string; textureId: string }>
 }
 
 const ProjectContext = createContext<ProjectContextValue | null>(null)
@@ -490,14 +493,29 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     setGraphNodes((nds) => [...nds, node])
   }, [])
 
+  const updateGraphNodeData = useCallback((nodeId: string, data: Record<string, unknown>) => {
+    setGraphNodes((nds) =>
+      nds.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, ...data } } : n)),
+    )
+  }, [])
+
+  const [activeTextureBindings, setActiveTextureBindings] = useState<
+    Array<{ uniformName: string; textureId: string }>
+  >([])
+
   const applyGraphToShader = useCallback(() => {
-    const { code, error } = buildFragmentShader(graphNodes, graphEdges)
+    const { code, error, textureBindings } = buildFragmentShader(graphNodes, graphEdges)
     if (error || !code) {
       setGraphCodegenError(error ?? 'Codegenerierung fehlgeschlagen.')
       return { ok: false, error: error ?? 'Unbekannter Fehler' }
     }
     setGraphCodegenError(null)
     setFragmentShader(code)
+    setActiveTextureBindings(textureBindings ?? [])
+    // Preload textures so the renderer can bind them
+    if (textureBindings?.length) {
+      void import('../shader/textureCache').then((m) => m.preloadTextureBindings(textureBindings))
+    }
     return { ok: true }
   }, [graphNodes, graphEdges])
 
@@ -688,8 +706,8 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       ...bundlesRef.current,
       [activeLayerId]: { fragment: fragmentShader, nodes: graphNodes, edges: graphEdges },
     }
-    return { metas: layerMetas, bundles }
-  }, [layerMetas, activeLayerId, fragmentShader, graphNodes, graphEdges])
+    return { metas: layerMetas, bundles, textureBindings: activeTextureBindings.length > 0 ? activeTextureBindings : undefined }
+  }, [layerMetas, activeLayerId, fragmentShader, graphNodes, graphEdges, activeTextureBindings])
 
   const getLayersPayload = useCallback((): ProjectLayersPayload => {
     return buildLayersPayload(
@@ -768,6 +786,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       onEdgesChange,
       onConnect,
       addGraphNode,
+      updateGraphNodeData,
       applyGraphToShader,
       graphCodegenError,
       setGraphCodegenError,
@@ -792,6 +811,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       getCompositeSnapshot,
       restoreFromSnapshot,
       getLayersPayload,
+      activeTextureBindings,
     }),
     [
       projectId,
@@ -804,6 +824,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       onEdgesChange,
       onConnect,
       addGraphNode,
+      updateGraphNodeData,
       applyGraphToShader,
       graphCodegenError,
       saveProjectLocal,
@@ -827,6 +848,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       getCompositeSnapshot,
       restoreFromSnapshot,
       getLayersPayload,
+      activeTextureBindings,
     ],
   )
 
