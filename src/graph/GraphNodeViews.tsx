@@ -143,12 +143,16 @@ export function VoronoiNode(props: NodeProps) {
 }
 
 export function Texture2DNode(props: NodeProps) {
-  const data = props.data as NodeLabel
+  const data = props.data as NodeLabel & { textureId?: string; texturePreview?: string }
   return (
     <div style={box}>
       <Handle type="target" position={Position.Left} id="uv" style={{ background: '#00e3fd' }} />
       <div style={{ ...title, color: '#00e3fd' }}>{data.label ?? 'Texture'}</div>
-      <div style={{ color: '#adaaaa' }}>checkerboard (→ Spec 2)</div>
+      {data.texturePreview ? (
+        <img src={data.texturePreview} alt="" style={{ width: 60, height: 40, objectFit: 'cover', borderRadius: 4, marginBottom: 4, border: '1px solid rgba(255,255,255,0.15)' }} />
+      ) : (
+        <div style={{ color: '#adaaaa', fontSize: 10 }}>{data.textureId ? 'Textur geladen' : 'Keine Textur'}</div>
+      )}
       <Handle type="source" position={Position.Right} id="out" style={{ background: '#b6a0ff' }} />
     </div>
   )

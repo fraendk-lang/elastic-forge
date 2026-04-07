@@ -11,6 +11,13 @@ export type GraphNodeData = {
   x?: number
   y?: number
   z?: number
+  textureId?: string
+  texturePreview?: string
+}
+
+export type TextureBinding = {
+  uniformName: string
+  textureId: string
 }
 
 function safeVar(id: string) {
@@ -49,7 +56,7 @@ function hasCycle(nodes: Node[], edges: Edge[]): boolean {
 export function buildFragmentShader(
   nodes: Node<GraphNodeData>[],
   edges: Edge[],
-): { code: string; error?: string } {
+): { code: string; error?: string; textureBindings?: TextureBinding[] } {
   const nodeById = new Map(nodes.map((n) => [n.id, n]))
   const outNode = nodes.find((n) => n.type === 'fragmentOut')
   if (!outNode) {
@@ -63,6 +70,8 @@ export function buildFragmentShader(
   const lines: string[] = []
   const emitted = new Set<string>()
   const usedPreambles = new Set<string>()
+  const textureBindings: TextureBinding[] = []
+  const textureUniforms: string[] = []
 
   function edgeToSource(nodeId: string, handleId: string | null | undefined) {
     const e = edges.find((x) => x.target === nodeId && x.targetHandle === handleId)
@@ -157,8 +166,16 @@ export function buildFragmentShader(
         const uvSrc = edgeToSource(nodeId, 'uv')
         if (!uvSrc) throw new Error('Texture2D: UV-Eingang fehlt.')
         const uv = emitExpr(uvSrc)
-        // Procedural checkerboard until Asset Library (Spec 2) adds real textures
-        lines.push(`  vec3 ${v} = vec3(mod(floor(${uv}.x * 8.0) + floor(${uv}.y * 8.0), 2.0));`)
+        const texId = data.textureId
+        if (texId) {
+          const uniformName = `u_tex_${safeVar(nodeId)}`
+          textureUniforms.push(`uniform sampler2D ${uniformName};`)
+          textureBindings.push({ uniformName, textureId: texId })
+          lines.push(`  vec3 ${v} = texture2D(${uniformName}, ${uv} * 0.5 + 0.5).rgb;`)
+        } else {
+          // Fallback: procedural checkerboard
+          lines.push(`  vec3 ${v} = vec3(mod(floor(${uv}.x * 8.0) + floor(${uv}.y * 8.0), 2.0));`)
+        }
         break
       }
       case 'colorPicker': {
@@ -196,6 +213,8 @@ export function buildFragmentShader(
     .filter(Boolean)
     .join('\n')
 
+  const texUniformBlock = textureUniforms.length > 0 ? textureUniforms.join('\n') + '\n' : ''
+
   const body = lines.join('\n')
   const code = `precision highp float;
 uniform float u_time;
@@ -207,7 +226,7 @@ uniform float u_saturation;
 uniform float u_contrast;
 uniform float u_gamma;
 uniform vec2 u_resolution;
-
+${texUniformBlock}
 vec3 applyGrade(vec3 col) {
   float lum = dot(col, vec3(0.299, 0.587, 0.114));
   col = mix(vec3(lum), col, clamp(u_saturation, 0.0, 2.0));
@@ -222,5 +241,5 @@ void main() {
 ${body}
 }
 `
-  return { code }
+  return { code, textureBindings: textureBindings.length > 0 ? textureBindings : undefined }
 }

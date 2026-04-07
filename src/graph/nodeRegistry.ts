@@ -181,6 +181,7 @@ export const nodeRegistry: NodeRegistryEntry[] = [
       { id: 'uv', type: 'vec2', label: 'UV' },
     ],
     outputs: [{ id: 'out', type: 'vec3' }],
+    defaultData: { textureId: '' },
   },
 ]
 

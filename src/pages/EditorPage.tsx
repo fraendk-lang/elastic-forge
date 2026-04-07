@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useProject } from '../context/ProjectContext'
 import VersionHistorySidebar from '../components/VersionHistorySidebar'
+import { exportShaderImage, EXPORT_PRESETS, type ExportFormat } from '../lib/exportImage'
 import { useToast } from '../context/ToastContext'
 import { useAuth } from '../context/AuthContext'
 import {
@@ -80,6 +81,9 @@ export default function EditorPage() {
   const uniformsRefLive = useRef(uniforms)
   const [error, setError] = useState('')
   const [historyOpen, setHistoryOpen] = useState(false)
+  const [exportPresetIdx, setExportPresetIdx] = useState(0)
+  const [exportFormat, setExportFormat] = useState<ExportFormat>('png')
+  const [exportQuality, setExportQuality] = useState(0.92)
 
   function applyGradeProfileToUniforms(profile: GradeProfile, base: unknown) {
     const u = normalizeUniforms(base)
@@ -723,6 +727,62 @@ ${SNIPPET_MAIN_END}`
         >
           {publishBusy ? 'Veröffentliche…' : 'Publish to Community'}
         </button>
+        <details className="editor-export-section" style={{ marginTop: 16, padding: '10px 0', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+          <summary style={{ cursor: 'pointer', fontSize: 12, color: '#b6a0ff', fontWeight: 600, marginBottom: 8 }}>
+            Bild exportieren
+          </summary>
+          <label style={{ fontSize: 11, color: '#adaaaa', display: 'block', marginBottom: 4 }}>Auflösung</label>
+          <select
+            value={exportPresetIdx}
+            onChange={(e) => setExportPresetIdx(Number(e.target.value))}
+            style={{ width: '100%', marginBottom: 8, padding: '6px 8px', background: '#20201f', color: '#fff', border: '1px solid rgba(72,72,71,0.25)', borderRadius: 6, fontSize: 12 }}
+          >
+            {EXPORT_PRESETS.map((p, i) => (
+              <option key={i} value={i}>{p.label}</option>
+            ))}
+          </select>
+          <label style={{ fontSize: 11, color: '#adaaaa', display: 'block', marginBottom: 4 }}>Format</label>
+          <select
+            value={exportFormat}
+            onChange={(e) => setExportFormat(e.target.value as ExportFormat)}
+            style={{ width: '100%', marginBottom: 8, padding: '6px 8px', background: '#20201f', color: '#fff', border: '1px solid rgba(72,72,71,0.25)', borderRadius: 6, fontSize: 12 }}
+          >
+            <option value="png">PNG</option>
+            <option value="jpeg">JPEG</option>
+            <option value="webp">WebP</option>
+          </select>
+          {exportFormat !== 'png' && (
+            <>
+              <label style={{ fontSize: 11, color: '#adaaaa' }}>Qualität: {Math.round(exportQuality * 100)}%</label>
+              <input
+                type="range"
+                min="0.5"
+                max="1"
+                step="0.01"
+                value={exportQuality}
+                onChange={(e) => setExportQuality(Number(e.target.value))}
+                style={{ width: '100%', marginBottom: 8 }}
+              />
+            </>
+          )}
+          <button
+            type="button"
+            className="save-btn"
+            style={{ width: '100%' }}
+            onClick={() => {
+              const preset = EXPORT_PRESETS[exportPresetIdx]!
+              const ok = exportShaderImage(
+                getCompositeSnapshot(),
+                uniforms,
+                { width: preset.w, height: preset.h, format: exportFormat, quality: exportQuality },
+                projectName,
+              )
+              push(ok ? `Bild exportiert (${preset.w}×${preset.h} ${exportFormat.toUpperCase()})` : 'Export fehlgeschlagen — Shader-Fehler?', ok ? 'ok' : 'err')
+            }}
+          >
+            Bild exportieren
+          </button>
+        </details>
         <div className="snapshot-list">
           <div className="snapshot-title">Versionen</div>
           {snapshots.slice(0, 5).map((s) => (
