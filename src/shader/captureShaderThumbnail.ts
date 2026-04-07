@@ -5,6 +5,25 @@ import type { UniformsState } from './uniforms'
 /** Ein Frame wie im Editor; festes u_time für wiedererkennbare Thumbnails. */
 const THUMB_TIME = 1.25
 
+/** Shared offscreen renderer — avoids "too many active WebGL contexts". */
+let sharedRenderer: THREE.WebGLRenderer | null = null
+
+function getSharedRenderer(w: number, h: number): THREE.WebGLRenderer {
+  if (!sharedRenderer) {
+    sharedRenderer = new THREE.WebGLRenderer({
+      antialias: true,
+      alpha: false,
+      preserveDrawingBuffer: true,
+    })
+    sharedRenderer.setPixelRatio(1)
+    sharedRenderer.outputColorSpace = THREE.SRGBColorSpace
+    sharedRenderer.toneMapping = THREE.ACESFilmicToneMapping
+    sharedRenderer.toneMappingExposure = 1.05
+  }
+  sharedRenderer.setSize(w, h)
+  return sharedRenderer
+}
+
 /**
  * Rendert den Shader einmal offscreen und liefert eine JPEG-Data-URL oder null bei Fehler.
  */
@@ -19,16 +38,7 @@ export function captureShaderThumbnail(
   const { w, h } = size
   const scene = new THREE.Scene()
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1)
-  const renderer = new THREE.WebGLRenderer({
-    antialias: true,
-    alpha: false,
-    preserveDrawingBuffer: true,
-  })
-  renderer.setPixelRatio(1)
-  renderer.setSize(w, h)
-  renderer.outputColorSpace = THREE.SRGBColorSpace
-  renderer.toneMapping = THREE.ACESFilmicToneMapping
-  renderer.toneMappingExposure = 1.05
+  const renderer = getSharedRenderer(w, h)
 
   const uniformsObj = {
     u_time: { value: THUMB_TIME },
@@ -42,12 +52,13 @@ export function captureShaderThumbnail(
     u_resolution: { value: new THREE.Vector2(w, h) },
   }
 
+  const geom = new THREE.PlaneGeometry(2, 2)
   const material = new THREE.ShaderMaterial({
     uniforms: uniformsObj,
     vertexShader: VERTEX_SHADER,
     fragmentShader: fragment,
   })
-  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), material)
+  const mesh = new THREE.Mesh(geom, material)
   scene.add(mesh)
 
   renderer.render(scene, camera)
@@ -55,15 +66,13 @@ export function captureShaderThumbnail(
   try {
     dataUrl = renderer.domElement.toDataURL('image/jpeg', 0.82)
   } catch {
-    mesh.geometry.dispose()
+    geom.dispose()
     material.dispose()
-    renderer.dispose()
     return null
   }
 
-  mesh.geometry.dispose()
+  geom.dispose()
   material.dispose()
-  renderer.dispose()
 
   if (!dataUrl || dataUrl.length < 32) return null
   return dataUrl

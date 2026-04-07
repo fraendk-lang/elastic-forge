@@ -331,6 +331,25 @@ export function installEditorCompositeViewport(opts: {
 
 const THUMB_TIME = 1.25
 
+/** Shared offscreen renderer for thumbnails — avoids "too many active WebGL contexts". */
+let thumbRenderer: THREE.WebGLRenderer | null = null
+
+function getThumbRenderer(w: number, h: number): THREE.WebGLRenderer {
+  if (!thumbRenderer) {
+    thumbRenderer = new THREE.WebGLRenderer({
+      antialias: true,
+      alpha: false,
+      preserveDrawingBuffer: true,
+    })
+    thumbRenderer.setPixelRatio(1)
+    thumbRenderer.outputColorSpace = THREE.SRGBColorSpace
+    thumbRenderer.toneMapping = THREE.ACESFilmicToneMapping
+    thumbRenderer.toneMappingExposure = 1.05
+  }
+  thumbRenderer.setSize(w, h)
+  return thumbRenderer
+}
+
 /** Thumbnail: gleiche Compositing-Pipeline wie die Editor-Vorschau. */
 export function captureCompositeThumbnail(
   snapshot: CompositeSnapshot,
@@ -341,16 +360,7 @@ export function captureCompositeThumbnail(
   if (stack.length === 0) return null
 
   const { w, h } = size
-  const renderer = new THREE.WebGLRenderer({
-    antialias: true,
-    alpha: false,
-    preserveDrawingBuffer: true,
-  })
-  renderer.setPixelRatio(1)
-  renderer.setSize(w, h)
-  renderer.outputColorSpace = THREE.SRGBColorSpace
-  renderer.toneMapping = THREE.ACESFilmicToneMapping
-  renderer.toneMappingExposure = 1.05
+  const renderer = getThumbRenderer(w, h)
 
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1)
   const geom = new THREE.PlaneGeometry(2, 2)
@@ -440,7 +450,6 @@ export function captureCompositeThumbnail(
     blendMat.dispose()
     geom.dispose()
     disposeRTSet(rt)
-    renderer.dispose()
     return null
   }
 
@@ -452,7 +461,6 @@ export function captureCompositeThumbnail(
     blendMat.dispose()
     geom.dispose()
     disposeRTSet(rt)
-    renderer.dispose()
     return null
   }
 
@@ -460,7 +468,6 @@ export function captureCompositeThumbnail(
   blendMat.dispose()
   geom.dispose()
   disposeRTSet(rt)
-  renderer.dispose()
 
   if (!dataUrl || dataUrl.length < 32) return null
   return dataUrl
