@@ -1,6 +1,6 @@
-import { useEffect, useRef } from 'react'
-import * as THREE from 'three'
-import { VERTEX_SHADER, validateFragmentShader } from '../shader/constants'
+import { useEffect, useState } from 'react'
+import { captureShaderThumbnail } from '../shader/captureShaderThumbnail'
+import { validateFragmentShader } from '../shader/constants'
 import type { UniformsState } from '../shader/uniforms'
 
 export default function ShaderThumbnail({
@@ -12,71 +12,19 @@ export default function ShaderThumbnail({
   uniforms: UniformsState
   className?: string
 }) {
-  const hostRef = useRef<HTMLDivElement>(null)
+  const [dataUrl, setDataUrl] = useState<string | null>(null)
+  const [error, setError] = useState(false)
 
   useEffect(() => {
-    const host = hostRef.current
-    if (!host) return
-
-    const ok = validateFragmentShader(fragment)
-    if (!ok.ok) {
-      host.replaceChildren()
-      const fall = document.createElement('div')
-      fall.className = 'shader-thumb shader-thumb--error'
-      fall.title = ok.error ?? 'Shader-Fehler'
-      host.appendChild(fall)
-      return () => host.removeChild(fall)
+    const check = validateFragmentShader(fragment)
+    if (!check.ok) {
+      setError(true)
+      setDataUrl(null)
+      return
     }
-
-    const w = Math.max(120, host.clientWidth || 200)
-    const h = Math.max(68, host.clientHeight || 112)
-
-    const scene = new THREE.Scene()
-    const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1)
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false })
-    renderer.setPixelRatio(1)
-    renderer.setSize(w, h)
-    renderer.outputColorSpace = THREE.SRGBColorSpace
-    renderer.toneMapping = THREE.ACESFilmicToneMapping
-    renderer.toneMappingExposure = 1.02
-    host.replaceChildren(renderer.domElement)
-
-    const uniformsObj = {
-      u_time: { value: 0 },
-      u_scale: { value: uniforms.u_scale },
-      u_speed: { value: uniforms.u_speed },
-      u_color: { value: new THREE.Vector3(...uniforms.u_color) },
-      u_intensity: { value: uniforms.u_intensity },
-      u_saturation: { value: uniforms.u_saturation },
-      u_contrast: { value: uniforms.u_contrast },
-      u_gamma: { value: uniforms.u_gamma },
-      u_resolution: { value: new THREE.Vector2(w, h) },
-    }
-
-    const material = new THREE.ShaderMaterial({
-      uniforms: uniformsObj,
-      vertexShader: VERTEX_SHADER,
-      fragmentShader: fragment,
-    })
-    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), material)
-    scene.add(mesh)
-
-    let raf = 0
-    const clock = new THREE.Clock()
-    const tick = () => {
-      uniformsObj.u_time.value = clock.getElapsedTime()
-      renderer.render(scene, camera)
-      raf = requestAnimationFrame(tick)
-    }
-    tick()
-
-    return () => {
-      cancelAnimationFrame(raf)
-      mesh.geometry.dispose()
-      material.dispose()
-      renderer.dispose()
-      host.replaceChildren()
-    }
+    setError(false)
+    const url = captureShaderThumbnail(fragment, uniforms, { w: 320, h: 180 })
+    setDataUrl(url)
   }, [
     fragment,
     uniforms.u_scale,
@@ -88,5 +36,25 @@ export default function ShaderThumbnail({
     uniforms.u_gamma,
   ])
 
-  return <div ref={hostRef} className={`shader-thumb-host ${className}`.trim()} />
+  if (error) {
+    return (
+      <div className={`shader-thumb-host ${className}`.trim()}>
+        <div className="shader-thumb shader-thumb--error" title="Shader-Fehler" />
+      </div>
+    )
+  }
+
+  return (
+    <div className={`shader-thumb-host ${className}`.trim()}>
+      {dataUrl ? (
+        <img
+          src={dataUrl}
+          alt=""
+          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', borderRadius: 'inherit' }}
+        />
+      ) : (
+        <div className="shader-thumb shader-thumb--loading" />
+      )}
+    </div>
+  )
 }
