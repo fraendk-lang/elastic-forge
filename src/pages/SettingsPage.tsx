@@ -108,7 +108,7 @@ export default function SettingsPage() {
             Über Elastic Forge
           </h2>
           <p className="settings-page__muted">
-            Version <strong>{__APP_VERSION__}</strong> · Obsidian Flux — Editor, Node Graph und
+            Version <strong>{__APP_VERSION__}</strong> · Elastic Forge — Editor, Node Graph und
             Live-Shader-Vorschau in einer Anwendung.
           </p>
         </section>

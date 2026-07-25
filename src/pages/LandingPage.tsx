@@ -68,16 +68,15 @@ export default function LandingPage() {
     <div className="landing midnight-architect">
       <section className="landing__hero-grid">
         <div className="landing__hero-copy">
-          <p className="landing__eyebrow">Shader-Plattform · Obsidian Flux</p>
+          <p className="landing__eyebrow">Elastic Universe · Shader Designer</p>
           <h1 className="landing__title">
-            Obsidian
+            Elastic
             <br />
-            <span className="landing__title-accent">Flux</span>
+            <span className="landing__title-accent">Forge</span>
           </h1>
           <p className="landing__lede">
-            Prozedurale Shader-Visuals auf hohem Niveau: kuratierte Looks, Live-Vorschau mit
-            professioneller Farbwiedergabe, Graph-zu-GLSL und ein offenes Projektformat — Grundlage
-            für eine wachsende Bibliothek geteilter Visuals.
+            Node-basierter Shader-Designer im Browser: kuratierte Presets, Live-GLSL-Vorschau,
+            Node Graph und Multi-Layer-Compositor — Teil des Elastic Universe.
           </p>
           <div className="landing__cta-row">
             <Link to="/gallery" className="landing__cta-primary" onClick={refresh}>
@@ -92,6 +91,14 @@ export default function LandingPage() {
             <Link to="/node-graph" className="landing__cta-ghost landing__cta-ghost--dim">
               Node Graph
             </Link>
+            <a
+              href="https://elasticuniverse.app/forge"
+              className="landing__cta-ghost landing__cta-ghost--dim"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Elastic Universe
+            </a>
           </div>
         </div>
 

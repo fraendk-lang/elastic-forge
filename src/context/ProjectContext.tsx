@@ -129,7 +129,7 @@ function loadInitial(): {
     uniforms: { ...defaultUniforms },
     graphNodes: g.nodes,
     graphEdges: g.edges,
-    projectName: 'Obsidian Flux',
+    projectName: 'Neues Projekt',
     projectId: crypto.randomUUID(),
     layers: ly,
   }
